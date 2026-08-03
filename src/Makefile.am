@@ -14,6 +14,10 @@ bin_PROGRAMS += %D%/openocd
 
 %C%_openocd_LDADD += $(MINGWLDADD)
 
+if AJI_CLIENT
+%C%_openocd_LDADD += $(AJI_CLIENT_LIBS)
+endif
+
 if INTERNAL_JIMTCL
 %C%_openocd_LDADD += $(top_builddir)/jimtcl/libjim.a
 else

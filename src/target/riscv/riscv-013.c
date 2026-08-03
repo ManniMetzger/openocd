@@ -4602,6 +4602,12 @@ riscv013_access_memory(struct target *target, const struct riscv_mem_access_args
 {
 	assert(riscv_mem_access_is_valid(args));
 
+	if (target->state != TARGET_HALTED) {
+		int retval = target_poll(target);
+		if (retval != ERROR_OK)
+			return retval;
+	}
+
 	const bool is_read = riscv_mem_access_is_read(args);
 	const char *const access_type = is_read ? "read" : "write";
 	if (!is_read && args.increment != args.size) {

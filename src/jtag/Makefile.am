@@ -26,6 +26,7 @@ include %D%/drivers/Makefile.am
 	%D%/interfaces.h \
 	%D%/minidriver.h \
 	%D%/jtag.h \
+	%D%/jtagcore_overwrite.h \
 	%D%/swd.h \
 	%D%/swim.h \
 	%D%/tcl.h

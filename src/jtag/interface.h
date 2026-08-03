@@ -374,6 +374,7 @@ int adapter_poll_trace(uint8_t *buf, size_t *size);
 // Keep in alphabetic order this list of drivers
 extern struct adapter_driver am335xgpio_adapter_driver;
 extern struct adapter_driver amt_jtagaccel_adapter_driver;
+extern struct adapter_driver aji_client_adapter_driver;
 extern struct adapter_driver angie_adapter_driver;
 extern struct adapter_driver armjtagew_adapter_driver;
 extern struct adapter_driver at91rm9200_adapter_driver;

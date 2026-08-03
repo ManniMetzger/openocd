@@ -18,6 +18,7 @@
 #include "rtos_standard_stackings.h"
 #include "target/armv7m.h"
 #include "target/cortex_m.h"
+#include "target/riscv/gdb_regs.h"
 
 #define FREERTOS_MAX_PRIORITIES	63
 
@@ -36,9 +37,54 @@ struct freertos_params {
 	const unsigned char list_elem_content_offset;	/* offsetof(ListItem_t, pvOwner) */
 	const unsigned char thread_stack_offset;		/* offsetof(TCB_t, pxTopOfStack) */
 	const unsigned char thread_name_offset;			/* offsetof(TCB_t, pcTaskName) */
+	const bool is_riscv;
 	const struct rtos_register_stacking *stacking_info_cm3;
 	const struct rtos_register_stacking *stacking_info_cm4f;
 	const struct rtos_register_stacking *stacking_info_cm4f_fpu;
+	const struct rtos_register_stacking *stacking_info_riscv;
+};
+
+static const struct stack_register_offset freertos_riscv_stack_offsets[] = {
+	{ GDB_REGNO_ZERO, -1, 32 },
+	{ GDB_REGNO_RA, 0x04, 32 },
+	{ GDB_REGNO_SP, -2, 32 },
+	{ GDB_REGNO_GP, -1, 32 },
+	{ GDB_REGNO_TP, -1, 32 },
+	{ GDB_REGNO_T0, 0x08, 32 },
+	{ GDB_REGNO_T1, 0x0c, 32 },
+	{ GDB_REGNO_T2, 0x10, 32 },
+	{ GDB_REGNO_S0, 0x14, 32 },
+	{ GDB_REGNO_S1, 0x18, 32 },
+	{ GDB_REGNO_A0, 0x1c, 32 },
+	{ GDB_REGNO_A1, 0x20, 32 },
+	{ GDB_REGNO_A2, 0x24, 32 },
+	{ GDB_REGNO_A3, 0x28, 32 },
+	{ GDB_REGNO_A4, 0x2c, 32 },
+	{ GDB_REGNO_A5, 0x30, 32 },
+	{ GDB_REGNO_A6, 0x34, 32 },
+	{ GDB_REGNO_A7, 0x38, 32 },
+	{ GDB_REGNO_S2, 0x3c, 32 },
+	{ GDB_REGNO_S3, 0x40, 32 },
+	{ GDB_REGNO_S4, 0x44, 32 },
+	{ GDB_REGNO_S5, 0x48, 32 },
+	{ GDB_REGNO_S6, 0x4c, 32 },
+	{ GDB_REGNO_S7, 0x50, 32 },
+	{ GDB_REGNO_S8, 0x54, 32 },
+	{ GDB_REGNO_S9, 0x58, 32 },
+	{ GDB_REGNO_S10, 0x5c, 32 },
+	{ GDB_REGNO_S11, 0x60, 32 },
+	{ GDB_REGNO_T3, 0x64, 32 },
+	{ GDB_REGNO_T4, 0x68, 32 },
+	{ GDB_REGNO_T5, 0x6c, 32 },
+	{ GDB_REGNO_T6, 0x70, 32 },
+	{ GDB_REGNO_PC, 0x00, 32 },
+};
+
+static const struct rtos_register_stacking freertos_riscv_stacking = {
+	.stack_registers_size = 31 * 4,
+	.stack_growth_direction = -1,
+	.num_output_registers = ARRAY_SIZE(freertos_riscv_stack_offsets),
+	.register_offsets = freertos_riscv_stack_offsets,
 };
 
 static const struct freertos_params freertos_params_list[] = {
@@ -52,9 +98,11 @@ static const struct freertos_params freertos_params_list[] = {
 	12,						/* list_elem_content_offset */
 	0,						/* thread_stack_offset; */
 	52,						/* thread_name_offset; */
+	false,					/* is_riscv */
 	&rtos_standard_cortex_m3_stacking,	/* stacking_info */
 	&rtos_standard_cortex_m4f_stacking,
 	&rtos_standard_cortex_m4f_fpu_stacking,
+	NULL,
 	},
 	{
 	"hla_target",			/* target_name */
@@ -66,9 +114,27 @@ static const struct freertos_params freertos_params_list[] = {
 	12,						/* list_elem_content_offset */
 	0,						/* thread_stack_offset; */
 	52,						/* thread_name_offset; */
+	false,					/* is_riscv */
 	&rtos_standard_cortex_m3_stacking,	/* stacking_info */
 	&rtos_standard_cortex_m4f_stacking,
 	&rtos_standard_cortex_m4f_fpu_stacking,
+	NULL,
+	},
+	{
+	"riscv",				/* target_name */
+	4,						/* thread_count_width; */
+	4,						/* pointer_width; */
+	12,						/* list_next_offset; */
+	20,						/* list_width; */
+	4,						/* list_elem_next_offset; */
+	12,						/* list_elem_content_offset */
+	0,						/* thread_stack_offset; */
+	52,						/* thread_name_offset; */
+	true,					/* is_riscv */
+	NULL,
+	NULL,
+	NULL,
+	&freertos_riscv_stacking,
 	},
 };
 
@@ -77,6 +143,8 @@ static int freertos_create(struct target *target);
 static int freertos_update_threads(struct rtos *rtos);
 static int freertos_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,
 		struct rtos_reg **reg_list, int *num_regs);
+static int freertos_get_thread_reg_value(struct rtos *rtos, threadid_t thread_id,
+		uint32_t reg_num, uint32_t *size, uint8_t **value);
 static int freertos_get_symbol_list_to_lookup(struct symbol_table_elem *symbol_list[]);
 
 const struct rtos_type freertos_rtos = {
@@ -86,6 +154,7 @@ const struct rtos_type freertos_rtos = {
 	.create = freertos_create,
 	.update_threads = freertos_update_threads,
 	.get_thread_reg_list = freertos_get_thread_reg_list,
+	.get_thread_reg_value = freertos_get_thread_reg_value,
 	.get_symbol_list_to_lookup = freertos_get_symbol_list_to_lookup,
 };
 
@@ -417,6 +486,10 @@ static int freertos_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,
 										thread_id + param->thread_stack_offset,
 										stack_ptr);
 
+	if (param->is_riscv)
+		return rtos_generic_stack_read(rtos->target, param->stacking_info_riscv,
+				stack_ptr, reg_list, num_regs);
+
 	/* Check for armv7m with *enabled* FPU, i.e. a Cortex-M4F */
 	int cm4_fpu_enabled = 0;
 	struct armv7m_common *armv7m_target = target_to_armv7m(rtos->target);
@@ -470,6 +543,33 @@ static int freertos_get_symbol_list_to_lookup(struct symbol_table_elem *symbol_l
 	}
 
 	return 0;
+}
+
+static int freertos_get_thread_reg_value(struct rtos *rtos, threadid_t thread_id,
+		uint32_t reg_num, uint32_t *size, uint8_t **value)
+{
+	struct rtos_reg *reg_list;
+	int num_regs;
+	int retval = freertos_get_thread_reg_list(rtos, thread_id, &reg_list, &num_regs);
+	if (retval != ERROR_OK)
+		return retval;
+
+	for (int i = 0; i < num_regs; ++i) {
+		if (reg_list[i].number == reg_num) {
+			*size = reg_list[i].size;
+			*value = malloc(DIV_ROUND_UP(*size, 8));
+			if (!*value) {
+				free(reg_list);
+				return ERROR_FAIL;
+			}
+			memcpy(*value, reg_list[i].value, DIV_ROUND_UP(*size, 8));
+			free(reg_list);
+			return ERROR_OK;
+		}
+	}
+
+	free(reg_list);
+	return ERROR_NOT_IMPLEMENTED;
 }
 
 #if 0

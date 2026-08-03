@@ -44,6 +44,9 @@ struct adapter_driver *adapter_drivers[] = {
 #if BUILD_AMTJTAGACCEL == 1
 		&amt_jtagaccel_adapter_driver,
 #endif
+#if BUILD_AJI_CLIENT == 1
+		&aji_client_adapter_driver,
+#endif
 #if BUILD_ANGIE == 1
 		&angie_adapter_driver,
 #endif

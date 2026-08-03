@@ -211,6 +211,20 @@ int adapter_quit(void)
 		t = n;
 	}
 
+	t = vjtag_all_taps();
+	while (t) {
+		struct jtag_tap *n = t->next_tap;
+		vjtag_tap_free(t);
+		t = n;
+	}
+
+	struct jtag_hardware *hardware = jtag_all_hardwares();
+	while (hardware) {
+		struct jtag_hardware *next = hardware->next_hardware;
+		jtag_hardware_free(hardware);
+		hardware = next;
+	}
+
 	return ERROR_OK;
 }
 

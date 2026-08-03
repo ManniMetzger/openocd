@@ -26,6 +26,7 @@
 #include <transport/transport.h>
 #include <helper/jep106.h>
 #include "helper/system.h"
+#include "jtagcore_overwrite.h"
 
 #ifdef HAVE_STRINGS_H
 #include <strings.h>
@@ -85,6 +86,8 @@ static int jtag_srst = -1;
  * List all TAPs that have been created.
  */
 static struct jtag_tap *__jtag_all_taps;
+static struct jtag_tap *all_vjtag_taps;
+static struct jtag_hardware *all_jtag_hardwares;
 
 static enum reset_types jtag_reset_config = RESET_NONE;
 enum tap_state cmd_queue_cur_state = TAP_RESET;
@@ -182,6 +185,13 @@ void jtag_poll_unmask(bool saved)
 
 /************/
 
+static struct jtagcore_overwrite jtagcore_overwrite_record;
+
+struct jtagcore_overwrite *jtagcore_get_overwrite_record(void)
+{
+	return &jtagcore_overwrite_record;
+}
+
 struct jtag_tap *jtag_all_taps(void)
 {
 	return __jtag_all_taps;
@@ -246,7 +256,20 @@ struct jtag_tap *jtag_tap_by_string(const char *s)
 		t = t->next_tap;
 	}
 
+	/* AJI/SLD virtual TAPs share the public lookup namespace. */
+	for (t = all_vjtag_taps; t; t = t->next_tap) {
+		if (strcmp(t->dotted_name, s) == 0)
+			return t;
+	}
+
 	/* no tap found by name, so try to parse the name as a number */
+	for (const char *p = s; *p; p++) {
+		if (*p < '0' || *p > '9')
+			return NULL;
+	}
+	if (!*s)
+		return NULL;
+
 	unsigned int n;
 	if (parse_uint(s, &n) != ERROR_OK)
 		return NULL;
@@ -1227,6 +1250,10 @@ static bool jtag_examine_chain_match_tap(const struct jtag_tap *tap)
  */
 static int jtag_examine_chain(void)
 {
+	struct jtagcore_overwrite *overwrite = jtagcore_get_overwrite_record();
+	if (overwrite->jtag_examine_chain)
+		return overwrite->jtag_examine_chain();
+
 	int retval;
 	unsigned int max_taps = jtag_tap_count();
 
@@ -1343,6 +1370,10 @@ out:
  */
 static int jtag_validate_ircapture(void)
 {
+	struct jtagcore_overwrite *overwrite = jtagcore_get_overwrite_record();
+	if (overwrite->jtag_validate_ircapture)
+		return overwrite->jtag_validate_ircapture();
+
 	struct jtag_tap *tap;
 	uint8_t *ir_test = NULL;
 	struct scan_field field;
@@ -1510,6 +1541,92 @@ void jtag_tap_free(struct jtag_tap *tap)
 	free(tap->tapname);
 	free(tap->dotted_name);
 	free(tap);
+}
+
+struct jtag_tap *vjtag_all_taps(void)
+{
+	return all_vjtag_taps;
+}
+
+void vjtag_tap_init(struct jtag_tap *tap)
+{
+	tap->is_virtual = true;
+	jtag_tap_init(tap);
+
+	/* jtag_tap_init() appends to the physical list; move it to the virtual list. */
+	struct jtag_tap **physical = &__jtag_all_taps;
+	while (*physical && *physical != tap)
+		physical = &(*physical)->next_tap;
+	if (*physical == tap)
+		*physical = tap->next_tap;
+
+	tap->next_tap = NULL;
+	struct jtag_tap **virtual_tap = &all_vjtag_taps;
+	while (*virtual_tap)
+		virtual_tap = &(*virtual_tap)->next_tap;
+	*virtual_tap = tap;
+}
+
+void vjtag_tap_free(struct jtag_tap *tap)
+{
+	struct jtag_tap **current = &all_vjtag_taps;
+	while (*current && *current != tap)
+		current = &(*current)->next_tap;
+	if (*current)
+		*current = tap->next_tap;
+	jtag_tap_free(tap);
+}
+
+struct jtag_tap *vjtag_tap_by_string(const char *dotted_name)
+{
+	for (struct jtag_tap *tap = all_vjtag_taps; tap; tap = tap->next_tap) {
+		if (!strcmp(tap->dotted_name, dotted_name))
+			return tap;
+	}
+	return NULL;
+}
+
+bool jtag_tap_on_all_vtaps_list(const struct jtag_tap *tap)
+{
+	return tap && tap->is_virtual;
+}
+
+struct jtag_hardware *jtag_all_hardwares(void)
+{
+	return all_jtag_hardwares;
+}
+
+void jtag_hardware_add(struct jtag_hardware *hardware)
+{
+	struct jtag_hardware **next = &all_jtag_hardwares;
+	hardware->position = 0;
+	while (*next) {
+		hardware->position++;
+		next = &(*next)->next_hardware;
+	}
+	*next = hardware;
+}
+
+struct jtag_hardware *jtag_hardware_by_string(const char *name)
+{
+	for (struct jtag_hardware *hardware = all_jtag_hardwares; hardware;
+			hardware = hardware->next_hardware) {
+		if (!strcmp(hardware->name, name))
+			return hardware;
+	}
+	return NULL;
+}
+
+void jtag_hardware_free(struct jtag_hardware *hardware)
+{
+	struct jtag_hardware **current = &all_jtag_hardwares;
+	while (*current && *current != hardware)
+		current = &(*current)->next_hardware;
+	if (*current)
+		*current = hardware->next_hardware;
+	free(hardware->name);
+	free(hardware->address);
+	free(hardware);
 }
 
 int jtag_init_inner(struct command_context *cmd_ctx)

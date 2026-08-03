@@ -48,6 +48,24 @@ if USE_LIBJAYLINK
 %C%_libocdjtagdrivers_la_LIBADD += $(LIBJAYLINK_LIBS)
 endif
 
+if AJI_CLIENT
+DRIVERFILES += \
+	%D%/aji_client/aji_client.c \
+	%D%/aji_client/aji_client_tcl.c \
+	%D%/aji_client/jtagservice.c \
+	%D%/aji_client/aji/c_jtag_client_gnuaji.c
+if IS_WIN32
+DRIVERFILES += %D%/aji_client/aji/c_jtag_client_gnuaji_win64.c
+%C%_libocdjtagdrivers_la_CPPFLAGS += -DPORT=WINDOWS -DSYS=WINDOWS
+else
+DRIVERFILES += %D%/aji_client/aji/c_jtag_client_gnuaji_lib64.c
+%C%_libocdjtagdrivers_la_CPPFLAGS += -DPORT=UNIX -DSYS=LINUX
+endif
+%C%_libocdjtagdrivers_la_CPPFLAGS += \
+	-DWINDOWS=1 -DUNIX=2 -DLINUX=3 -DMODE_64_BIT \
+	-I$(srcdir)/%D%/aji_client -I$(srcdir)/%D%/aji_client/aji
+endif
+
 if JLINK
 DRIVERFILES += %D%/jlink.c
 if INTERNAL_LIBJAYLINK
@@ -221,6 +239,12 @@ DRIVERFILES += %D%/xvc.c
 endif
 
 DRIVERHEADERS = \
+	%D%/aji_client/jtagservice.h \
+	%D%/aji_client/aji/aji.h \
+	%D%/aji_client/aji/c_aji.h \
+	%D%/aji_client/aji/c_jtag_client_gnuaji.h \
+	%D%/aji_client/aji/c_jtag_client_gnuaji_lib64.h \
+	%D%/aji_client/aji/c_jtag_client_gnuaji_win64.h \
 	%D%/bitbang.h \
 	%D%/bitq.h \
 	%D%/libftdi_helper.h \

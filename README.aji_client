@@ -1,0 +1,60 @@
+# Intel AJI client adapter
+
+This port adds an `aji_client` adapter that connects OpenOCD to the Intel
+Quartus JTAG server (`jtagd` on Linux or `jtagserver.exe` on Windows). It
+supports physical TAPs and Intel SLD nodes exposed as OpenOCD virtual TAPs.
+
+## Build
+
+Run the normal OpenOCD bootstrap process and enable the adapter explicitly:
+
+```sh
+./bootstrap
+./configure --enable-aji-client
+make
+```
+
+On Windows the adapter loads `libaji_client.dll` at runtime. Place that DLL
+beside `openocd.exe`; it can be built from the Intel `libaji_client` source.
+
+On Linux, `libaji_client` is linked into OpenOCD. If it is not installed in a
+standard library directory, pass its location and dependencies explicitly:
+
+```sh
+LDFLAGS="-L/path/to/libaji_client" \
+AJI_CLIENT_LIBS="-laji_client -lstdc++ -ldl -lpthread" \
+./configure --enable-aji-client
+```
+
+`AJI_CLIENT_LIBS` can be overridden for distributions of the library that
+need additional dependencies.
+
+## Configuration
+
+Select the adapter as usual:
+
+```tcl
+adapter driver aji_client
+```
+
+When more than one cable is visible, select one by the name reported by the
+Quartus JTAG tools:
+
+```tcl
+aji_client hardware cable0 {USB-BlasterII}
+```
+
+Declare an SLD node after declaring its physical parent TAP:
+
+```tcl
+jtag newtap fpga tap -irlen 10 -expected-id 0x02e050dd
+vjtag create fpga.tap.niosv \
+    -chain-position fpga.tap \
+    -expected-id 0x08986e00
+target create fpga.niosv riscv -chain-position fpga.tap.niosv
+```
+
+See `tcl/board/altera_arria10_niosv__aji_client.cfg` for a complete example.
+
+The optional `QUARTUS_JTAG_CLIENT_CONFIG` environment variable is passed to
+the Quartus AJI runtime in the same way as other AJI clients.

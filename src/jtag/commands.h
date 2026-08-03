@@ -41,6 +41,14 @@ struct scan_command {
 	struct scan_field *fields;
 	/** state in which JTAG commands should finish */
 	enum tap_state end_state;
+	/** TAP targeted by this scan. */
+	struct jtag_tap *tap;
+	/** True when tap identifies an AJI/SLD virtual TAP. */
+	bool tap_is_sld;
+	/** Fields belonging to the targeted TAP within fields. */
+	struct scan_field *tap_fields;
+	/** Number of fields belonging to the targeted TAP. */
+	unsigned int num_tap_fields;
 };
 
 struct statemove_command {

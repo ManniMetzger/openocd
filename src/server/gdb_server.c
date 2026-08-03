@@ -427,19 +427,6 @@ static void gdb_log_outgoing_packet(struct connection *connection, const char *p
 			gdb_connection->unique_index, packet_len, packet_buf, checksum);
 }
 
-static void gdb_log_outgoing_async_notif(struct connection *connection, const char *buf,
-	unsigned int len)
-{
-	if (!LOG_LEVEL_IS(LOG_LVL_DEBUG))
-		return;
-
-	struct target *target = get_target_from_connection(connection);
-	struct gdb_connection *gdb_connection = connection->priv;
-
-	LOG_TARGET_DEBUG(target, "{%d} sending packet: %.*s",
-		gdb_connection->unique_index, len, buf);
-}
-
 static int gdb_put_packet_inner(struct connection *connection,
 		const char *buffer, int len)
 {
@@ -3859,40 +3846,6 @@ static int gdb_input(struct connection *connection)
 	return ERROR_OK;
 }
 
-/*
- * Send custom notification packet as keep-alive during memory read/write.
- *
- * From gdb 7.0 (released 2009-10-06) an unknown notification received during
- * memory read/write would be silently dropped.
- * Before gdb 7.0 any character, with exclusion of "+-$", would be considered
- * as junk and ignored.
- * In both cases the reception will reset the timeout counter in gdb, thus
- * working as a keep-alive.
- * Check putpkt_binary() and getpkt_sane() in gdb commit
- * 74531fed1f2d662debc2c209b8b3faddceb55960
- *
- * Enable remote debug in gdb with 'set debug remote 1' to either dump the junk
- * characters in gdb pre-7.0 and the notification from gdb 7.0.
- */
-static void gdb_async_notif(struct connection *connection)
-{
-	static unsigned char count;
-	unsigned char checksum = 0;
-	char buf[22];
-
-	int len = sprintf(buf, "%%oocd_keepalive:%2.2x", count++);
-	for (int i = 1; i < len; i++)
-		checksum += buf[i];
-	len += sprintf(buf + len, "#%2.2x", checksum);
-
-#ifdef _DEBUG_GDB_IO_
-	LOG_DEBUG("sending packet '%s'", buf);
-#endif
-
-	gdb_log_outgoing_async_notif(connection, buf, len);
-	gdb_write(connection, buf, len);
-}
-
 static void gdb_keep_client_alive(struct connection *connection)
 {
 	struct gdb_connection *gdb_con = connection->priv;
@@ -3902,8 +3855,9 @@ static void gdb_keep_client_alive(struct connection *connection)
 		/* no need for keep-alive */
 		break;
 	case GDB_OUTPUT_NOTIF:
-		/* send asynchronous notification */
-		gdb_async_notif(connection);
+		/* Keep quiet here.  GDB ignores unknown notifications during
+		 * long-running packets, but LLDB treats %oocd_keepalive as the
+		 * packet response and gets out of sync. */
 		break;
 	case GDB_OUTPUT_ALL:
 		/* send an empty O packet */

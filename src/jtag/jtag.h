@@ -141,6 +141,10 @@ struct jtag_tap {
 	struct jtag_tap *next_tap;
 	/* private pointer to support none-jtag specific functions */
 	void *priv;
+
+	/* AJI virtual TAP metadata. Virtual TAPs live on a separate list. */
+	struct jtag_tap *parent;
+	bool is_virtual;
 };
 
 void jtag_tap_init(struct jtag_tap *tap);
@@ -601,5 +605,27 @@ void jtag_poll_unmask(bool saved);
 #include <jtag/minidriver.h>
 
 __COMMAND_HANDLER(handle_jtag_newtap);
+
+/* Intel AJI/SLD virtual TAP support. */
+struct jtag_tap *vjtag_all_taps(void);
+void vjtag_tap_init(struct jtag_tap *tap);
+void vjtag_tap_free(struct jtag_tap *tap);
+struct jtag_tap *vjtag_tap_by_string(const char *dotted_name);
+bool jtag_tap_on_all_vtaps_list(const struct jtag_tap *tap);
+
+struct jtag_hardware {
+	char *name;
+	char *address;
+	unsigned int position;
+	struct jtag_hardware *next_hardware;
+};
+
+struct jtag_hardware *jtag_all_hardwares(void);
+void jtag_hardware_add(struct jtag_hardware *hardware);
+struct jtag_hardware *jtag_hardware_by_string(const char *name);
+void jtag_hardware_free(struct jtag_hardware *hardware);
+
+__COMMAND_HANDLER(handle_aji_vjtag_create);
+__COMMAND_HANDLER(handle_aji_hardware);
 
 #endif /* OPENOCD_JTAG_JTAG_H */

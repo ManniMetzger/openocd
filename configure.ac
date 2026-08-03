@@ -179,6 +179,9 @@ m4_define([REMOTE_BITBANG_ADAPTER],
 m4_define([LIBJAYLINK_ADAPTERS],
 	[[[jlink], [SEGGER J-Link Programmer], [JLINK]]])
 
+m4_define([AJI_CLIENT_ADAPTER],
+	[[[aji_client], [Intel AJI Client Driver], [AJI_CLIENT]]])
+
 m4_define([XVC_ADAPTERS],
 	[[[xlnx_xvc], [Xilinx XVC PCIe and AXI drives], [XLNX_XVC]]])
 
@@ -308,8 +311,12 @@ AC_ARG_ADAPTERS([
 
 AC_ARG_ADAPTERS([
   PARALLEL_PORT_ADAPTER,
-  AMTJTAGACCEL_ADAPTER
+  AMTJTAGACCEL_ADAPTER,
+  AJI_CLIENT_ADAPTER
   ],[no])
+
+AC_ARG_VAR([AJI_CLIENT_LIBS],
+  [linker flags for libaji_client (Linux default: -laji_client -lstdc++ -ldl -lpthread)])
 
 # The following adapters use bitbanging and can actually be built on all architectures,
 # which is useful to verify that they still build fine.
@@ -624,6 +631,16 @@ PROCESS_ADAPTERS([HOST_ARM_BITBANG_ADAPTERS], ["x$ac_cv_header_sys_mman_h" = "xy
 PROCESS_ADAPTERS([HOST_ARM_OR_AARCH64_BITBANG_ADAPTERS], ["x$ac_cv_header_sys_mman_h" = "xyes"], [header sys/mman.h])
 PROCESS_ADAPTERS([DUMMY_ADAPTER], [true], [unused])
 PROCESS_ADAPTERS([NETWORK_ADAPTERS], [true], [unused])
+PROCESS_ADAPTERS([AJI_CLIENT_ADAPTER], [true], [unused])
+
+AS_IF([test "x$enable_aji_client" != "xno" -a -z "$AJI_CLIENT_LIBS"], [
+  AS_IF([test "x$is_win32" = "xyes"], [
+    AJI_CLIENT_LIBS="-lshlwapi"
+  ], [
+    AJI_CLIENT_LIBS="-laji_client -lstdc++ -ldl -lpthread"
+  ])
+])
+AC_SUBST([AJI_CLIENT_LIBS])
 
 AS_IF([test "x$enable_xvc" != "xno"], [
   build_bitbang=yes
@@ -830,6 +847,7 @@ m4_foreach([adapter_driver], [USB1_ADAPTERS,
 	JTAG_VPI_ADAPTER,
 	RSHIM_ADAPTER,
 	AMTJTAGACCEL_ADAPTER,
+	AJI_CLIENT_ADAPTER,
 	HOST_ARM_BITBANG_ADAPTERS,
 	HOST_ARM_OR_AARCH64_BITBANG_ADAPTERS,
 	CMSIS_DAP_TCP_ADAPTER,
