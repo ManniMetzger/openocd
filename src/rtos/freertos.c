@@ -22,6 +22,11 @@
 
 #define FREERTOS_MAX_PRIORITIES	63
 
+/* RTOS state can be stale or uninitialized when GDB first attaches.  Put a
+ * generous upper bound on the task count so a corrupt value cannot cause a
+ * huge allocation followed by an effectively unbounded list traversal. */
+#define FREERTOS_MAX_TASKS	4095
+
 /* FIXME: none of the _width parameters are actually observed properly!
  * you WILL need to edit more if you actually attempt to target a 8/16/64
  * bit target!
@@ -232,6 +237,11 @@ static int freertos_update_threads(struct rtos *rtos)
 		LOG_ERROR("Could not read FreeRTOS thread count from target");
 		return retval;
 	}
+	if (thread_list_size > FREERTOS_MAX_TASKS) {
+		LOG_ERROR("FreeRTOS thread count is unreasonably big, not proceeding: %" PRIu32,
+			thread_list_size);
+		return ERROR_FAIL;
+	}
 
 	/* wipe out previous thread details if any */
 	rtos_free_threadlist(rtos);
@@ -262,6 +272,11 @@ static int freertos_update_threads(struct rtos *rtos)
 	LOG_DEBUG("FreeRTOS: Read xSchedulerRunning at 0x%" PRIx64 ", value 0x%" PRIx32,
 										rtos->symbols[FREERTOS_VAL_X_SCHEDULER_RUNNING].address,
 										scheduler_running);
+	if (scheduler_running > 1) {
+		LOG_ERROR("FreeRTOS scheduler state is invalid, not proceeding: 0x%" PRIx32,
+			scheduler_running);
+		return ERROR_FAIL;
+	}
 
 	if ((thread_list_size  == 0) || (rtos->current_thread == 0) || (scheduler_running != 1)) {
 		/* Either : No RTOS threads - there is always at least the current execution though */
