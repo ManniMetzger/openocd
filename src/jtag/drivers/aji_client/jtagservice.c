@@ -415,6 +415,19 @@ static AJI_ERROR jtagservice_update_active_tap_record(
 //			is_sld? "yes" : "no", 
 //			(unsigned long) node_index
 //);
+	if (UINT32_MAX == tap_index) {
+		jtagservice.in_use_device = NULL;
+		jtagservice.in_use_device_id = 0;
+		jtagservice.in_use_device_tap_position = UINT32_MAX;
+		jtagservice.in_use_device_irlen = 0;
+		jtagservice.in_use_open_id = 0;
+		jtagservice.is_sld = false;
+		jtagservice.in_use_hier_id_node_position = UINT32_MAX;
+		jtagservice.in_use_hier_id = NULL;
+		jtagservice.in_use_hier_id_idcode = 0;
+		return AJI_NO_ERROR;
+	}
+
 	//TODO: consider not validating and assuming all parameter passed to 
     // this function is validated to prevent redundant validation
 	AJI_ERROR status = jtagservice_validate_tap_index(0, tap_index);
@@ -436,22 +449,13 @@ static AJI_ERROR jtagservice_update_active_tap_record(
 		}
 	}
 
-	if(UINT32_MAX == tap_index) {
-		jtagservice.in_use_device = NULL;
-		jtagservice.in_use_device_id = 0;
-		jtagservice.in_use_device_tap_position = UINT32_MAX;
-		jtagservice.in_use_device_irlen = 0;
+	AJI_DEVICE device = jtagservice.device_list[tap_index];
+	jtagservice.in_use_device = &(jtagservice.device_list[tap_index]);
+	jtagservice.in_use_device_id = device.device_id;
+	jtagservice.in_use_device_tap_position = tap_index;
+	jtagservice.in_use_device_irlen = device.instruction_length;
 
-		jtagservice.in_use_open_id = 0;
-	} else {
-		AJI_DEVICE device = jtagservice.device_list[tap_index];
-		jtagservice.in_use_device = &(jtagservice.device_list[tap_index]);
-		jtagservice.in_use_device_id = device.device_id;
-		jtagservice.in_use_device_tap_position = tap_index;
-		jtagservice.in_use_device_irlen = device.instruction_length;
-
-		jtagservice.in_use_open_id = jtagservice.device_open_id_list[tap_index];
-	}
+	jtagservice.in_use_open_id = jtagservice.device_open_id_list[tap_index];
 
 	jtagservice.is_sld = is_sld;
 	if (jtagservice.is_sld) {
@@ -490,6 +494,17 @@ AJI_ERROR jtagservice_unlock()
 					status, 
 					c_aji_error_decode(status)
 		);
+		if (AJI_INVALID_OPEN_ID == status) {
+			DWORD tap_index = jtagservice.in_use_device_tap_position;
+			if (jtagservice.is_sld) {
+				DWORD node_index = jtagservice.in_use_hier_id_node_position;
+				if (tap_index < jtagservice.device_count &&
+						node_index < jtagservice.hier_id_n[tap_index])
+					jtagservice.hier_id_open_id_list[tap_index][node_index] = 0;
+			} else if (tap_index < jtagservice.device_count) {
+				jtagservice.device_open_id_list[tap_index] = 0;
+			}
+		}
 	}
 	status = jtagservice_update_active_tap_record(0, (unsigned long) UINT32_MAX, false, UINT32_MAX);
 	return AJI_NO_ERROR;

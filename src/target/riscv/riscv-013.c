@@ -2147,6 +2147,28 @@ static int examine(struct target *target)
 	uint32_t abstractcs;
 	if (dm_read(target, &abstractcs, DM_ABSTRACTCS) != ERROR_OK)
 		return ERROR_FAIL;
+
+	/* The DM can retain cmderr after a previous debugger disconnect or reset.
+	 * Issuing another abstract command while cmderr is set makes that command
+	 * fail immediately.  Clear and verify the stale status before probing any
+	 * registers.  The readback also provides the ordering required by DMs where
+	 * the clear is not visible immediately after the DMI write. */
+	if (get_field(abstractcs, DM_ABSTRACTCS_BUSY) ||
+			get_field(abstractcs, DM_ABSTRACTCS_CMDERR)) {
+		LOG_TARGET_DEBUG(target, "Clearing stale abstract command state (abstractcs=0x%08x)",
+				abstractcs);
+		if (riscv013_clear_abstract_error(target) != ERROR_OK)
+			return ERROR_FAIL;
+		if (dm_read(target, &abstractcs, DM_ABSTRACTCS) != ERROR_OK)
+			return ERROR_FAIL;
+		if (get_field(abstractcs, DM_ABSTRACTCS_BUSY) ||
+				get_field(abstractcs, DM_ABSTRACTCS_CMDERR)) {
+			LOG_TARGET_ERROR(target,
+					"Failed to clear abstract command state (abstractcs=0x%08x)",
+					abstractcs);
+			return ERROR_FAIL;
+		}
+	}
 	info->datacount = get_field(abstractcs, DM_ABSTRACTCS_DATACOUNT);
 	info->progbufsize = get_field(abstractcs, DM_ABSTRACTCS_PROGBUFSIZE);
 

@@ -373,9 +373,10 @@ static int aji_client_scan(struct scan_command *const cmd)
 				status = c_aji_access_overlay(open_id, instruction,
 					read_buffer ? &capture : NULL);
 
-				if (status == AJI_CHAIN_IN_USE) {
-					LOG_WARNING("AJI chain in use during virtual IR scan; "
-						"releasing stale lock and retrying once");
+				if (status == AJI_CHAIN_IN_USE || status == AJI_INVALID_OPEN_ID) {
+					LOG_WARNING("AJI virtual IR scan returned %s; "
+						"reopening the node and retrying once",
+						c_aji_error_decode(status));
 					status = aji_client_relock_tap(cmd->tap);
 					if (status == AJI_NO_ERROR || status == AJI_LOCKED) {
 						open_id = jtagservice_get_in_use_open_id();
