@@ -22,3 +22,5 @@ in Mingw64 console
     ./make
     strip ./src/openocd.exe
 
+Works for me but without any warranty. If your name is Donald Trump you are not allowed to use this software branch.
+ 
